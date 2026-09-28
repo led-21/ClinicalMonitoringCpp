@@ -61,11 +61,12 @@ flowchart TD
 
 ## Engineering Highlights
 
-* **Modern C++20 Standards**: Built using `-std=c++20`, leveraging modern features such as `[[nodiscard]]`, standard library concepts, and chrono formatting.
-* **Value Semantics & Clean Ownership**: Domain models prioritize explicit ownership semantics (`std::unique_ptr` for bed lifetime management) and value types for calculations (`std::optional<NewsScore>` to explicitly signal validation failure).
-* **Safe Observer Pattern**: `ScoreUpdateNotifier` features dynamic subscription and unsubscription (`Unsubscribe`), safe iteration, and defensive null-checks to prevent dangling references.
+* **Modern C++20 & Constexpr Computing**: Built using `-std=c++20`, featuring compile-time `constexpr` physiological calculation, `static_assert` verification, `std::string_view`, and structured binding support.
+* **Strong Typing & Zero-Heap Calculation**: Uses strongly-typed domain enums (`RiskLevel`, `AlertColor`, `ConsciousnessLevel`) and fixed `std::array<int, 7>` component scores, eliminating dynamic memory allocations in calculation hot-paths.
+* **RAII Scoped Subscriptions**: `ScoreUpdateNotifier` provides `ScopedSubscription` handles with move semantics that automatically disconnect upon scope exit, preventing dangling pointer references.
+* **Exception Safety & Fault Isolation**: Observer dispatch executes in an isolated environment; an unhandled exception in one downstream monitor will never interrupt or truncate alert delivery to subsequent healthy observers.
 * **Stream Dependency Inversion**: `Dashboard` and `LedIndicator` accept configurable `std::ostream&` references (defaulting to `std::cout`), enabling deterministic, hermetic unit testing without global state manipulation.
-* **Comprehensive Test Suite**: 44 independent automated unit tests covering vital sign boundary conditions, clinical threshold rules, bed lifecycle edge cases, and observer broadcast mechanics.
+* **49 Automated Unit Tests**: Comprehensive test suite covering clinical boundary conditions, capacity limits, unsubscription lifecycle, exception resilience, and CTest integration.
 * **Zero External Dependencies**: Pure standard C++ (STL) implementation with native CMake configuration, building seamlessly across compilers (MSVC, GCC, Clang).
 
 ---
@@ -192,7 +193,7 @@ Or execute the unit test binary directly:
 
 * **NEWS Validation & Thresholds (18 tests)**: Boundary scoring for respiration rate, oxygen saturation, temperature, blood pressure, heart rate, supplemental oxygen, and consciousness levels ('A', 'V', 'P', 'U').
 * **ICU Bed Management (16 tests)**: Bed indexing (1–6), re-admission protection, full capacity handling, query by ID, and bed recycling after discharge.
-* **Observer & Alert Broadcasting (10 tests)**: Observer dispatch, multiple subscriber fanout, empty observer safety, stream redirection, and unsubscription verification.
+* **Observer & Alert Broadcasting (13 tests + compile-time checks)**: Observer dispatch, subscriber fanout, empty observer safety, stream redirection, RAII ScopedSubscription auto-disconnection, move semantics, and exception fault isolation.
 
 ---
 
@@ -204,8 +205,8 @@ Or execute the unit test binary directly:
 2. **Explicit Nullability via `std::optional`**:
    Rather than throwing exceptions on physiologically invalid input (such as out-of-range oxygen saturation or negative heart rates), the calculation returns `std::nullopt`. This treats validation errors as expected domain states rather than exceptional runtime failures.
 
-3. **Observer Pattern with Stream Redirection**:
-   Display observers (`Dashboard`, `LedIndicator`) accept an output stream reference in their constructor. This keeps domain presentation testable without mocking frameworks or stdout interception.
+3. **Observer Pattern with Stream Redirection & RAII**:
+   Display observers (`Dashboard`, `LedIndicator`) accept an output stream reference in their constructor, keeping presentation testable. Subscriptions can be managed via move-only `ScopedSubscription` handles for automatic lifetime management and zero dangling pointers.
 
 4. **Ownership and Resource Lifetime**:
    The ICU ward holds exclusive ownership of admitted patients using `std::unique_ptr<Patient>`. Discharging a patient explicitly resets the smart pointer, enforcing immediate deallocation and preventing stale memory retention.
@@ -214,8 +215,7 @@ Or execute the unit test binary directly:
 
 ## Possible Improvements
 
-* **Concurrency & Thread Safety**: Introduce read-write locking (`std::shared_mutex`) around `ICU` bed access to support multi-threaded bed monitoring.
-* **Observer Weak References**: Transition observer registration to `std::weak_ptr` tokens or RAII connection handles (similar to `boost::signals2`) for automatic lifetime tracking.
+* **Concurrency & Thread Safety**: Introduce read-write locking (`std::shared_mutex`) around `ICU` bed access and thread-safe queues in `ScoreUpdateNotifier` to support concurrent telemetry ingestion.
 * **Persistent Storage**: Abstract a repository interface (`IPatientRepository`) to persist patient histories across sessions (e.g., SQLite or JSON file storage).
 * **REST / gRPC Service**: Expose the core monitoring engine as a microservice receiving telemetry from simulated bedside monitors.
 

@@ -26,6 +26,15 @@ namespace
         std::string lastColor;
     };
 
+    class ThrowingObserver : public IScoreObserver
+    {
+    public:
+        void OnScoreUpdated(const ScoreUpdateData&) override
+        {
+            throw std::runtime_error("Observer hardware communication fault");
+        }
+    };
+
     void ShouldNotifySubscribedObserver()
     {
         ScoreUpdateNotifier notifier;
@@ -185,6 +194,96 @@ namespace
 
         AssertEqual(0, observer.notificationCount, "Unsubscribed observer should not receive updates");
     }
+
+    void ShouldAutoUnsubscribeOnScopedSubscriptionDestruction()
+    {
+        ScoreUpdateNotifier notifier;
+        RecordingObserver observer;
+
+        {
+            auto scopedSub = notifier.SubscribeScoped(&observer);
+            AssertTrue(scopedSub.IsConnected(), "Scoped subscription should be connected initially");
+            AssertEqual(1, static_cast<int>(notifier.ObserverCount()), "Observer count should be 1");
+
+            ScoreUpdateData data;
+            data.highestRiskLevel = "Low";
+            data.highestRiskColor = "Green";
+            notifier.Notify(data);
+            AssertEqual(1, observer.notificationCount, "Observer should receive notification while scoped");
+        }
+
+        // scopedSub went out of scope here
+        AssertEqual(0, static_cast<int>(notifier.ObserverCount()), "Observer count should be 0 after scope exit");
+
+        ScoreUpdateData data2;
+        data2.highestRiskLevel = "High";
+        data2.highestRiskColor = "Red";
+        notifier.Notify(data2);
+        AssertEqual(1, observer.notificationCount, "Observer should NOT receive notification after scope exit");
+    }
+
+    void ShouldSupportMoveSemanticsOnScopedSubscription()
+    {
+        ScoreUpdateNotifier notifier;
+        RecordingObserver observer;
+
+        auto sub1 = notifier.SubscribeScoped(&observer);
+        AssertTrue(sub1.IsConnected(), "sub1 should be connected");
+
+        // Move construct
+        ScopedSubscription sub2(std::move(sub1));
+        AssertTrue(!sub1.IsConnected(), "sub1 should be disconnected after move");
+        AssertTrue(sub2.IsConnected(), "sub2 should be connected after move");
+
+        // Move assign
+        ScopedSubscription sub3;
+        sub3 = std::move(sub2);
+        AssertTrue(!sub2.IsConnected(), "sub2 should be disconnected after move assign");
+        AssertTrue(sub3.IsConnected(), "sub3 should be connected after move assign");
+
+        sub3.Disconnect();
+        AssertTrue(!sub3.IsConnected(), "sub3 should be disconnected after explicit Disconnect");
+        AssertEqual(0, static_cast<int>(notifier.ObserverCount()), "Observer count should be 0");
+    }
+
+    void ShouldIsolateObserverExceptionAndContinueNotifying()
+    {
+        ScoreUpdateNotifier notifier;
+        ThrowingObserver faultyObserver;
+        RecordingObserver healthyObserver;
+
+        bool errorCallbackTriggered = false;
+        notifier.SetErrorHandler([&](IScoreObserver* obs, const std::exception* ex) {
+            if (obs == &faultyObserver && ex != nullptr)
+            {
+                errorCallbackTriggered = true;
+            }
+        });
+
+        // Register faulty observer first, followed by healthy observer
+        notifier.Subscribe(&faultyObserver);
+        notifier.Subscribe(&healthyObserver);
+
+        ScoreUpdateData data;
+        data.highestRiskLevel = "High";
+        data.highestRiskColor = "Red";
+
+        // Must not throw despite faultyObserver throwing std::runtime_error
+        bool threw = false;
+        try
+        {
+            notifier.Notify(data);
+        }
+        catch (...)
+        {
+            threw = true;
+        }
+
+        AssertTrue(!threw, "Notify() must guarantee exception safety and not leak observer exceptions");
+        AssertTrue(errorCallbackTriggered, "Error handler should be invoked when observer throws");
+        AssertEqual(1, healthyObserver.notificationCount, "Healthy observer must still receive notification");
+        AssertEqual(std::string("High"), healthyObserver.lastRiskLevel, "Healthy observer should receive data");
+    }
 }
 
 void RegisterObserverNotificationTests(std::vector<TestCase>& tests)
@@ -199,4 +298,7 @@ void RegisterObserverNotificationTests(std::vector<TestCase>& tests)
     tests.push_back({ "Notifier - Broadcast to observer pair",                   ShouldNotifyPairOfObservers });
     tests.push_back({ "Notifier - Deliver multiple sequential notifications",    ShouldDeliverMultipleNotificationsSequentially });
     tests.push_back({ "Notifier - Support dynamic unsubscription (RAII-friendly)", ShouldSupportUnsubscribe });
+    tests.push_back({ "Notifier - RAII ScopedSubscription auto-disconnects on destruction", ShouldAutoUnsubscribeOnScopedSubscriptionDestruction });
+    tests.push_back({ "Notifier - ScopedSubscription supports move semantics",   ShouldSupportMoveSemanticsOnScopedSubscription });
+    tests.push_back({ "Notifier - Exception isolation ensures broadcast to all healthy observers", ShouldIsolateObserverExceptionAndContinueNotifying });
 }
