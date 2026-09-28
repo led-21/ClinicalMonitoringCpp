@@ -178,6 +178,30 @@ namespace
         auto* found = icu.FindPatientById("Q1", nullptr);
         AssertTrue(found != nullptr, "FindPatientById with null bed param should work");
     }
+
+    void ShouldUseModernFindAndDischargeOptionalApi()
+    {
+        ICU icu;
+        icu.CreatePatientAtBed(3, "P042", "Arthur", "Dent");
+
+        // Modern FindPatient returning std::optional<BedLookupResult> with structured binding
+        const auto lookup = icu.FindPatient("P042");
+        AssertTrue(lookup.has_value(), "Modern FindPatient should find patient");
+        AssertEqual(3, lookup->bedNumber, "Bed number should match");
+        AssertEqual(std::string("P042"), lookup->patient->GetId(), "Patient id should match");
+
+        // Const overload
+        const ICU& constIcu = icu;
+        const auto constLookup = constIcu.FindPatient("P042");
+        AssertTrue(constLookup.has_value(), "Const FindPatient should find patient");
+        AssertEqual(3, constLookup->bedNumber, "Const lookup bed number should match");
+
+        // Modern DischargePatient returning std::optional<std::string>
+        const auto dischargedName = icu.DischargePatient("P042");
+        AssertTrue(dischargedName.has_value(), "Discharge should succeed");
+        AssertEqual(std::string("Arthur Dent"), dischargedName.value(), "Discharged full name should match");
+        AssertTrue(!icu.FindPatient("P042").has_value(), "Patient should no longer exist after discharge");
+    }
 }
 
 void RegisterIcuBedManagementTests(std::vector<TestCase>& tests)
@@ -198,4 +222,5 @@ void RegisterIcuBedManagementTests(std::vector<TestCase>& tests)
     tests.push_back({ "ICU - List multiple occupied beds",             ShouldGetOccupiedBedsWithMultiplePatients });
     tests.push_back({ "ICU - Empty beds after all discharged",         ShouldReportEmptyBedsAfterAllDischarged });
     tests.push_back({ "ICU - Find patient without bed param",          ShouldFindPatientWithoutBedNumberParam });
+    tests.push_back({ "ICU - Modern std::optional Find and Discharge API", ShouldUseModernFindAndDischargeOptionalApi });
 }

@@ -16,24 +16,6 @@ namespace clinical
 {
     namespace
     {
-        int RiskRank(const std::string& riskLevel)
-        {
-            if (riskLevel == "Low") return 0;
-            if (riskLevel == "Low-Medium") return 1;
-            if (riskLevel == "Medium") return 2;
-            if (riskLevel == "High") return 3;
-            return -1;
-        }
-
-        std::string RiskColor(const std::string& riskLevel)
-        {
-            if (riskLevel == "Low") return "Green";
-            if (riskLevel == "Low-Medium") return "Yellow";
-            if (riskLevel == "Medium") return "Orange";
-            if (riskLevel == "High") return "Red";
-            return "Unknown";
-        }
-
         bool ReadInt(const std::string& prompt, int& value)
         {
             std::cout << prompt;
@@ -91,9 +73,7 @@ namespace clinical
             std::cout << "Level of Consciousness (A/V/P/U): ";
             std::cin >> levelOfConsciousness;
 
-            levelOfConsciousness = static_cast<char>(std::toupper(static_cast<unsigned char>(levelOfConsciousness)));
-            return levelOfConsciousness == 'A' || levelOfConsciousness == 'V'
-                || levelOfConsciousness == 'P' || levelOfConsciousness == 'U';
+            return ParseConsciousnessLevel(levelOfConsciousness).has_value();
         }
 
         ScoreUpdateData BuildScoreUpdateData(const ICU& icu)
@@ -113,22 +93,27 @@ namespace clinical
                 DashboardEntry entry;
                 entry.bedNumber = bedNumber;
                 entry.patientName = patient->GetFullName();
-                entry.riskLevel = latest.score.riskLevel;
+                entry.risk = latest.score.risk;
+                entry.riskLevel = std::string(ToString(entry.risk));
                 entry.updatedAt = latest.recordedAt;
                 data.entries.push_back(entry);
 
-                const int rank = RiskRank(latest.score.riskLevel);
+                const int rank = RiskRank(latest.score.risk);
                 if (rank > bestRank)
                 {
                     bestRank = rank;
-                    data.highestRiskLevel = latest.score.riskLevel;
-                    data.highestRiskColor = RiskColor(latest.score.riskLevel);
+                    data.highestRisk = latest.score.risk;
+                    data.highestRiskLevel = std::string(ToString(data.highestRisk));
+                    data.alertColor = ColorForRisk(data.highestRisk);
+                    data.highestRiskColor = std::string(ToString(data.alertColor));
                 }
             }
 
             if (bestRank < 0)
             {
+                data.highestRisk = RiskLevel::Low;
                 data.highestRiskLevel = "Low";
+                data.alertColor = AlertColor::Green;
                 data.highestRiskColor = "Green";
             }
 
@@ -213,14 +198,14 @@ namespace clinical
             std::cout << "Patient ID: ";
             std::cin >> id;
 
-            int bedNumber = 0;
-            Patient* patient = icu.FindPatientById(id, &bedNumber);
-            if (!patient)
+            const auto lookup = icu.FindPatient(id);
+            if (!lookup.has_value())
             {
                 std::cout << "No Patient with ID: " << id << "\n";
                 return;
             }
 
+            const auto& [patient, bedNumber] = lookup.value();
             std::cout << "Bed " << bedNumber << ": " << patient->GetId() << " - "
                 << patient->GetFullName() << "\n";
 
@@ -263,14 +248,14 @@ namespace clinical
             std::cout << "Patient ID: ";
             std::cin >> id;
 
-            Patient* patient = icu.FindPatientById(id);
-            if (!patient)
+            const auto lookup = icu.FindPatient(id);
+            if (!lookup.has_value())
             {
                 std::cout << "Patient not found. Please try again\n";
                 return;
             }
 
-            const std::string fullName = patient->GetFullName();
+            const std::string fullName = lookup->patient->GetFullName();
 
             std::string confirmation;
             std::cout << "Discharge patient " << fullName << " ? (Y/N)";
@@ -279,7 +264,7 @@ namespace clinical
             if (!confirmation.empty() &&
                 std::toupper(static_cast<unsigned char>(confirmation[0])) == 'Y')
             {
-                icu.DischargePatientById(id);
+                icu.DischargePatient(id);
                 notifier.Notify(BuildScoreUpdateData(icu));
                 std::cout << "Patient discharged.\n";
                 return;

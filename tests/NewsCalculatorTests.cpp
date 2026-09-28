@@ -4,6 +4,18 @@
 
 using namespace clinical;
 
+// Compile-time constexpr evaluation verification
+static_assert(NewsCalculator::Calculate(PhysiologicalParameters{ 16, 96, false, 37.0, 120, 70, 'A' })->total == 0,
+    "NEWS zero-score calculation must be evaluated at compile time");
+static_assert(NewsCalculator::Calculate(PhysiologicalParameters{ 16, 96, false, 37.0, 120, 70, 'A' })->risk == RiskLevel::Low,
+    "NEWS zero-score risk level must be RiskLevel::Low at compile time");
+static_assert(NewsCalculator::Calculate(PhysiologicalParameters{ 25, 91, true, 37.0, 120, 70, 'A' })->total >= 7,
+    "NEWS high risk total score must be >= 7 at compile time");
+static_assert(NewsCalculator::Calculate(PhysiologicalParameters{ 25, 91, true, 37.0, 120, 70, 'A' })->risk == RiskLevel::High,
+    "NEWS high risk level must be RiskLevel::High at compile time");
+static_assert(!NewsCalculator::Calculate(PhysiologicalParameters{ 16, 49, false, 37.0, 120, 70, 'A' }).has_value(),
+    "Invalid physiological input must yield nullopt at compile time");
+
 namespace
 {
     // -------------------------------------------------------------------------
@@ -18,6 +30,7 @@ namespace
         AssertTrue(result.has_value(), "Low risk example should produce a valid score");
         AssertEqual(3, result->total, "Total score mismatch for low risk example");
         AssertEqual(std::string("Low"), result->riskLevel, "Risk level should be Low");
+        AssertTrue(result->risk == RiskLevel::Low, "Risk enum should be Low");
     }
 
     void ShouldCalculateZeroScore()
@@ -29,6 +42,7 @@ namespace
         AssertTrue(result.has_value(), "Zero-score case should be valid");
         AssertEqual(0, result->total, "Zero-score total mismatch");
         AssertEqual(std::string("Low"), result->riskLevel, "Zero-score risk should be Low");
+        AssertTrue(result->risk == RiskLevel::Low, "Risk enum should be Low");
     }
 
     void ShouldReturnLowMediumWhenSingleRedScoreExists()
@@ -40,6 +54,7 @@ namespace
         AssertTrue(result.has_value(), "Single red score case should be valid");
         AssertEqual(3, result->total, "Single red score total mismatch");
         AssertEqual(std::string("Low-Medium"), result->riskLevel, "Single red score risk mismatch");
+        AssertTrue(result->risk == RiskLevel::LowMedium, "Risk enum should be LowMedium");
     }
 
     void ShouldCalculateMediumRisk()
@@ -51,6 +66,7 @@ namespace
         AssertTrue(result.has_value(), "Medium risk case should be valid");
         AssertEqual(5, result->total, "Medium risk total mismatch");
         AssertEqual(std::string("Medium"), result->riskLevel, "Medium risk level mismatch");
+        AssertTrue(result->risk == RiskLevel::Medium, "Risk enum should be Medium");
     }
 
     void ShouldCalculateHighRisk()
@@ -62,6 +78,7 @@ namespace
         AssertTrue(result.has_value(), "High risk case should be valid");
         AssertTrue(result->total >= 7, "High risk total should be >= 7");
         AssertEqual(std::string("High"), result->riskLevel, "High risk level mismatch");
+        AssertTrue(result->risk == RiskLevel::High, "Risk enum should be High");
     }
 
     // -------------------------------------------------------------------------
@@ -250,6 +267,19 @@ namespace
         PhysiologicalParameters p{ 16, 96, false, 37.0, 120, 70, 'X' };
         AssertTrue(!NewsCalculator::Calculate(p).has_value(), "LOC=X should be rejected");
     }
+
+    void ShouldSupportTypedEnumsAndHelpers()
+    {
+        PhysiologicalParameters p{ 16, 96, false, 37.0, 120, 70, 'A' };
+        const auto result = NewsCalculator::Calculate(p);
+
+        AssertTrue(result.has_value(), "Calculation with valid parameters should succeed");
+        AssertTrue(result->risk == RiskLevel::Low, "RiskLevel should be Low enum");
+        AssertEqual(0, RiskRank(result->risk), "Risk rank for Low should be 0");
+        AssertTrue(ColorForRisk(result->risk) == AlertColor::Green, "Alert color for Low should be Green");
+        AssertEqual(std::string_view("Green"), ToString(AlertColor::Green), "ToString for Green should match");
+        AssertEqual(std::string_view("Alert"), ToString(ConsciousnessLevel::Alert), "ToString for Alert should match");
+    }
 }
 
 void RegisterNewsCalculatorTests(std::vector<TestCase>& tests)
@@ -277,4 +307,7 @@ void RegisterNewsCalculatorTests(std::vector<TestCase>& tests)
     tests.push_back({ "NEWS - Reject invalid temperature",                  ShouldRejectInvalidTemperature });
     tests.push_back({ "NEWS - Reject invalid heart rate",                   ShouldRejectInvalidHeartRate });
     tests.push_back({ "NEWS - Reject invalid consciousness value",          ShouldRejectInvalidConsciousness });
+
+    // Strong typing
+    tests.push_back({ "NEWS - Strongly typed enums and conversion helpers", ShouldSupportTypedEnumsAndHelpers });
 }
