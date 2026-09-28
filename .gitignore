@@ -1,0 +1,30 @@
+# Build directories
+build/
+bin/
+lib/
+out/
+.cache/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.VC.db
+*.sln
+*.vcxproj*
+
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.pdb
+*.ilk
+*.obj
+*.o
+
+# OS artifacts
+.DS_Store
+Thumbs.db
