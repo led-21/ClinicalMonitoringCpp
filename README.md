@@ -1,5 +1,10 @@
 # ClinicalMonitoringCpp
 
+[![CI](https://github.com/led-21/ClinicalMonitoringCpp/actions/workflows/build.yml/badge.svg)](https://github.com/led-21/ClinicalMonitoringCpp/actions/workflows/build.yml)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![CMake](https://img.shields.io/badge/CMake-3.20+-064F8C?logo=cmake)
+
 A modern C++20 simulation of an intensive care unit (ICU) clinical monitoring system, implementing standardized early warning score calculations, event-driven observer alerts, and patient lifecycle management.
 
 ---
